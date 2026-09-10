@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bilingual Paper Reader"
+  short_description: "Turn research PDFs into faithful bilingual HTML readers"
+  default_prompt: "Use $bilingual-paper-reader to turn this research PDF into a faithful bilingual HTML reader."
