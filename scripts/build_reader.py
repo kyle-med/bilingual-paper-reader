@@ -69,12 +69,23 @@ def build(data, json_path, output):
     js = (SKILL_DIR / "assets" / "reader.js").read_text(encoding="utf-8")
     main, toc, figures = [], [], []
     first_subsection = True
+    in_methods = False
+    method_endings = {"data availability", "code availability", "references", "acknowledgements", "author contributions", "competing interests"}
     for section in data["sections"]:
+        heading_key = section["heading_en"].strip().lower()
+        kind = section.get("kind", "")
+        if kind == "methods" or heading_key == "methods" or section["id"] == "methods":
+            kind, in_methods = "methods", True
+        elif kind == "references" or heading_key == "references" or section["id"] == "references":
+            kind, in_methods = "references", False
+        elif in_methods and (kind == "post-methods" or heading_key in method_endings):
+            kind, in_methods = "post-methods", False
         level = section.get("level", "major")
         extra = " first-subsection" if level == "subsection" and first_subsection else ""
         if level == "subsection":
             first_subsection = False
-        main.append(f'<section class="section-head {esc(level)}{extra}" id="{esc(section["id"])}"><p class="section-kicker">{esc(section["heading_zh"])}</p><h2>{esc(section["heading_en"])}</h2><aside class="reading-note"><b>阅读旁注</b><span>{esc(section["note_zh"])}</span></aside></section>')
+        note = "" if in_methods or kind == "references" else f'<aside class="reading-note"><b>阅读旁注</b><span>{esc(section["note_zh"])}</span></aside>'
+        main.append(f'<section class="section-head {esc(level)}{extra}" id="{esc(section["id"])}" data-section-kind="{esc(kind)}"><p class="section-kicker">{esc(section["heading_zh"])}</p><h2>{esc(section["heading_en"])}</h2>{note}</section>')
         toc.append(f'<a href="#{esc(section["id"])}">{esc(section["heading_en"])}</a>')
         for block in section["blocks"]:
             if block["type"] == "paragraph":
@@ -87,7 +98,9 @@ def build(data, json_path, output):
                 figures.append(f'<a href="#figure-{esc(number)}">Figure {esc(number)}</a>')
     metadata = " · ".join(filter(None, [str(data.get("published", "")), f'DOI: {data["doi"]}' if data.get("doi") else ""]))
     initial = json.dumps({"version":1,"paperId":data["paper_id"],"updatedAt":"","notes":{}}, ensure_ascii=False).replace("<", "\\u003c")
-    doc = f'''<!doctype html><html lang="zh-CN" data-paper-id="{esc(data['paper_id'])}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(data['title'])} · 双语阅读器</title><style>{css}</style></head><body><div class="shell"><main><header><div class="journal">{esc(data['journal'])}</div><h1>{esc(data['title'])}</h1><p class="authors">{esc(data['authors'])}</p><p class="meta">{esc(metadata)}<br>英文依原文顺序排布；中文为忠实翻译。仅清理 PDF 断词与版面换行。</p><div class="toolbar"><button type="button" id="toggle-zh">显示 / 隐藏中文</button><button type="button" id="toggle-notes">显示 / 隐藏旁注</button><button type="button" id="save-html">保存批注版 HTML</button><a class="source-link" href="source-paper.pdf" target="_blank">打开原始 PDF</a></div></header>{''.join(main)}</main><nav class="sidebar"><h3>Contents</h3>{''.join(toc)}<div class="fig-links"><h3>Figures</h3>{''.join(figures)}</div><section class="sidebar-section"><div class="notebook-head"><h3>全文导出</h3></div><div class="note-tools"><button id="export-en" type="button">导出英文全文</button><button id="export-zh" type="button">导出中文全文</button></div></section><section class="sidebar-section"><div class="notebook-head"><h3>我的笔记</h3><span class="note-count" id="note-count">0 条</span></div><div class="note-tools"><button id="export-json" type="button">备份 JSON</button><button id="import-json" type="button">导入 JSON</button><button id="export-md" type="button">导出 Markdown</button></div><input id="import-json-file" type="file" accept=".json,application/json" hidden><div id="notebook-list"></div></section></nav></div><script id="paper-notes" type="application/json">{initial}</script><script>{js}</script></body></html>'''
+    supplement_url = str(data.get("supplementary_url", ""))
+    supplement_link = f'<a class="source-link" href="{esc(supplement_url)}" target="_blank" rel="noopener noreferrer">打开补充材料</a>' if supplement_url else ""
+    doc = f'''<!doctype html><html lang="zh-CN" data-paper-id="{esc(data['paper_id'])}" data-supplement-url="{esc(supplement_url)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(data['title'])} · 双语阅读器</title><style>{css}</style></head><body><div class="shell"><main><header><div class="journal">{esc(data['journal'])}</div><h1>{esc(data['title'])}</h1><p class="authors">{esc(data['authors'])}</p><p class="meta">{esc(metadata)}<br>英文依原文顺序排布；中文为忠实翻译。仅清理 PDF 断词与版面换行。</p><div class="toolbar"><button type="button" id="toggle-zh">显示 / 隐藏中文</button><button type="button" id="toggle-notes">显示 / 隐藏旁注</button><button type="button" id="save-html">保存批注版 HTML</button><a class="source-link" href="source-paper.pdf" target="_blank">打开原始 PDF</a>{supplement_link}</div></header>{''.join(main)}</main><nav class="sidebar"><h3>Contents</h3>{''.join(toc)}<div class="fig-links"><h3>Figures</h3>{''.join(figures)}</div><section class="sidebar-section"><div class="notebook-head"><h3>全文导出</h3></div><div class="note-tools"><button id="export-en" type="button">导出英文全文</button><button id="export-zh" type="button">导出中文全文</button></div></section><section class="sidebar-section"><div class="notebook-head"><h3>我的笔记</h3><span class="note-count" id="note-count">0 条</span></div><div class="note-tools"><button id="export-json" type="button">备份 JSON</button><button id="import-json" type="button">导入 JSON</button><button id="export-md" type="button">导出 Markdown</button></div><input id="import-json-file" type="file" accept=".json,application/json" hidden><div id="notebook-list"></div></section></nav></div><script id="paper-notes" type="application/json">{initial}</script><script>{js}</script></body></html>'''
     path = output / f"{re.sub(r'[^A-Za-z0-9._-]+', '_', data['paper_id'])}_reader.html"
     path.write_text(doc, encoding="utf-8")
     return path
